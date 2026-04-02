@@ -1,0 +1,174 @@
+
+<style>
+  #hanoi { padding: 1rem 0; font-size: 14px; color: var(--color-text-primary); }
+  #hanoi canvas { display: block; width: 100%; }
+  .h-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .h-info { display: flex; gap: 16px; font-size: 13px; color: var(--color-text-secondary); margin-bottom: 12px; flex-wrap: wrap; }
+  .h-info span { font-weight: 500; color: var(--color-text-primary); }
+</style>
+
+<div id="hanoi">
+  <div class="h-controls">
+    <label style="font-size:13px;color:var(--color-text-secondary);">Discs</label>
+    <input type="number" id="disc-count" min="1" max="8" value="6" style="width:60px;" />
+    <button onclick="applyDiscs()">Apply</button>
+    <button onclick="prevStep()">Prev</button>
+    <button onclick="nextStep()">Next</button>
+    <button onclick="autoPlay()" id="auto-btn">Auto play</button>
+    <button onclick="resetHanoi()">Reset</button>
+  </div>
+  <div class="h-info">
+    Move: <span id="move-num">0</span> / <span id="total-moves">63</span>
+    &nbsp; Disc <span id="disc-info">—</span>
+    &nbsp; From <span id="from-info">—</span> to <span id="to-info">—</span>
+  </div>
+  <canvas id="hcanvas" height="300"></canvas>
+</div>
+
+<script>
+const COLORS = ['#D85A30','#185FA5','#3B6D11','#534AB7','#993556','#BA7517','#0F6E56','#7F77DD'];
+const POLE_LABELS = ['A','B','C'];
+
+let DISCS = 6, moves = [], states = [], stepIdx = 0, autoTimer = null;
+
+function genMoves(n, from, to, via, arr) {
+  if (n === 0) return;
+  genMoves(n-1, from, via, to, arr);
+  arr.push([n, from, to]);
+  genMoves(n-1, via, to, from, arr);
+}
+
+function applyMoves() {
+  let init = Array.from({length: DISCS}, (_, i) => DISCS - i);
+  let poles = [init, [], []];
+  states.push(JSON.parse(JSON.stringify(poles)));
+  for (let [disc, from, to] of moves) {
+    poles[to].push(poles[from].pop());
+    states.push(JSON.parse(JSON.stringify(poles)));
+  }
+}
+
+function initHanoi() {
+  moves = []; states = [];
+  genMoves(DISCS, 0, 2, 1, moves);
+  applyMoves();
+  document.getElementById('total-moves').textContent = moves.length;
+  stepIdx = 0;
+  render();
+}
+
+function applyDiscs() {
+  clearInterval(autoTimer); autoTimer = null;
+  document.getElementById('auto-btn').textContent = 'Auto play';
+  let val = parseInt(document.getElementById('disc-count').value);
+  if (isNaN(val) || val < 1) val = 1;
+  if (val > 8) val = 8;
+  document.getElementById('disc-count').value = val;
+  DISCS = val;
+  initHanoi();
+}
+
+function render() {
+  const canvas = document.getElementById('hcanvas');
+  const W = canvas.offsetWidth || 640;
+  canvas.width = W;
+  const H = 300;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const poleColor = isDark ? '#888' : '#aaa';
+  const baseColor = isDark ? '#555' : '#ccc';
+  const textColor = isDark ? '#ccc' : '#555';
+
+  const poleX = [W*0.18, W*0.5, W*0.82];
+  const baseY = 250;
+  const poleH = 190;
+  const maxDiscW = 120;
+  const minDiscW = 24;
+  const discH = DISCS <= 4 ? 22 : DISCS <= 6 ? 16 : 13;
+  const gap = 2;
+
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(20, baseY, W-40, 8);
+
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = poleColor;
+    ctx.fillRect(poleX[i]-4, baseY-poleH, 8, poleH+8);
+    ctx.fillStyle = textColor;
+    ctx.font = '500 14px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(POLE_LABELS[i], poleX[i], baseY + 26);
+  }
+
+  const poles = states[stepIdx];
+  for (let p = 0; p < 3; p++) {
+    for (let d = 0; d < poles[p].length; d++) {
+      const disc = poles[p][d];
+      const w = DISCS === 1 ? maxDiscW : minDiscW + (disc-1) * (maxDiscW - minDiscW) / (DISCS - 1);
+      const x = poleX[p] - w/2;
+      const y = baseY - (d+1)*(discH+gap);
+      ctx.fillStyle = COLORS[(disc-1) % COLORS.length];
+      roundRect(ctx, x, y, w, discH, 4);
+      ctx.fillStyle = '#fff';
+      ctx.font = '500 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(disc, poleX[p], y + discH/2 + 4);
+    }
+  }
+
+  const m = moves[stepIdx-1];
+  if (m) {
+    document.getElementById('move-num').textContent = stepIdx;
+    document.getElementById('disc-info').textContent = m[0];
+    document.getElementById('from-info').textContent = POLE_LABELS[m[1]];
+    document.getElementById('to-info').textContent = POLE_LABELS[m[2]];
+  } else {
+    document.getElementById('move-num').textContent = 0;
+    document.getElementById('disc-info').textContent = '—';
+    document.getElementById('from-info').textContent = '—';
+    document.getElementById('to-info').textContent = '—';
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y); ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath(); ctx.fill();
+}
+
+function nextStep() { if (stepIdx < states.length-1) { stepIdx++; render(); } }
+function prevStep() { if (stepIdx > 0) { stepIdx--; render(); } }
+function resetHanoi() {
+  clearInterval(autoTimer); autoTimer = null;
+  document.getElementById('auto-btn').textContent = 'Auto play';
+  stepIdx = 0; render();
+}
+function autoPlay() {
+  if (autoTimer) {
+    clearInterval(autoTimer); autoTimer = null;
+    document.getElementById('auto-btn').textContent = 'Auto play';
+    return;
+  }
+  document.getElementById('auto-btn').textContent = 'Pause';
+  const speed = DISCS <= 4 ? 600 : DISCS <= 6 ? 400 : 250;
+  autoTimer = setInterval(() => {
+    if (stepIdx >= states.length-1) {
+      clearInterval(autoTimer); autoTimer = null;
+      document.getElementById('auto-btn').textContent = 'Auto play';
+      return;
+    }
+    stepIdx++; render();
+  }, speed);
+}
+
+initHanoi();
+window.addEventListener('resize', render);
+</script>
